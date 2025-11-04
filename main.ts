@@ -101,7 +101,7 @@ export default class FolderTagPlugin extends Plugin {
                 existingTags = existingTags.filter(t => !oldTags.includes(t));
             }
 
-            // Add new folder tags (no duplicates)
+            // Add new folder tags
             folderTags.forEach(t => { if (!existingTags.includes(t)) existingTags.push(t); });
 
             yaml.tags = existingTags;

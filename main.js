@@ -87,7 +87,7 @@ class FolderTagPlugin extends obsidian.Plugin {
                 const oldTags = this.getFolderTagsFromPath(oldPath);
                 existingTags = existingTags.filter(t => !oldTags.includes(t));
             }
-            // Add new folder tags (no duplicates)
+            // Add new folder tags
             folderTags.forEach(t => { if (!existingTags.includes(t))
                 existingTags.push(t); });
             yaml.tags = existingTags;

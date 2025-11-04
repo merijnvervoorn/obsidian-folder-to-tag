@@ -1,17 +1,12 @@
-import { App, Plugin, TFile, Notice, PluginSettingTab, Setting } from "obsidian";
-import jsyaml from 'js-yaml';
+import { App, Plugin, TFile, Notice, PluginSettingTab, Setting, normalizePath } from "obsidian";
 
 interface FolderTagPluginSettings {
-    defaultTagStyle: "yaml" | "inline";
-    overrideExisting: boolean;
     folderDepth: "1" | "2split" | "2single" | "full";
     tagPrefix: string;
     tagSuffix: string;
 }
 
 const DEFAULT_SETTINGS: FolderTagPluginSettings = {
-    defaultTagStyle: "yaml",
-    overrideExisting: false,
     folderDepth: "1",
     tagPrefix: "",
     tagSuffix: ""
@@ -24,23 +19,17 @@ export default class FolderTagPlugin extends Plugin {
         await this.loadSettings();
         this.addSettingTab(new FolderTagSettingTab(this.app, this));
 
-        // Note creation
-        this.registerEvent(
-            this.app.vault.on("create", async (file) => {
-                if (file instanceof TFile && file.extension === "md") {
-                    await this.applyFolderTag(file, "create");
-                }
-            })
-        );
+        this.registerEvent(this.app.vault.on("create", async (file) => {
+            if (file instanceof TFile && file.extension === "md") {
+                await this.applyFolderTag(file, "create");
+            }
+        }));
 
-        // Note rename/move
-        this.registerEvent(
-            this.app.vault.on("rename", async (file, oldPath) => {
-                if (file instanceof TFile && file.extension === "md") {
-                    await this.applyFolderTag(file, "move", oldPath);
-                }
-            })
-        );
+        this.registerEvent(this.app.vault.on("rename", async (file, oldPath) => {
+            if (file instanceof TFile && file.extension === "md") {
+                await this.applyFolderTag(file, "move", oldPath);
+            }
+        }));
     }
 
     async loadSettings() {
@@ -51,37 +40,39 @@ export default class FolderTagPlugin extends Plugin {
         await this.saveData(this.settings);
     }
 
-    // -------------------------
-    // Get folder tags based on depth and prefix/suffix
-    // -------------------------
     private getFolderTags(file: TFile): string[] {
-        const pathParts = file.path.split("/").slice(0, -1); // all folders leading to the file
-        if (pathParts.length === 0) return [];
+        return this.getFolderTagsFromPath(file.path);
+    }
+
+    private getFolderTagsFromPath(path: string): string[] {
+        const normalized = normalizePath(path);
+        const parts = normalized.split("/").slice(0, -1);
+        if (!parts.length) return [];
 
         const { folderDepth, tagPrefix, tagSuffix } = this.settings;
         let tags: string[] = [];
 
         switch (folderDepth) {
             case "1":
-                tags.push(tagPrefix + pathParts[pathParts.length - 1] + tagSuffix);
+                tags.push(tagPrefix + parts[parts.length - 1] + tagSuffix);
                 break;
             case "2split":
-                if (pathParts.length >= 2) {
-                    tags.push(tagPrefix + pathParts[pathParts.length - 1] + tagSuffix);
-                    tags.push(tagPrefix + pathParts[pathParts.length - 2] + tagSuffix);
+                if (parts.length >= 2) {
+                    tags.push(tagPrefix + parts[parts.length - 1] + tagSuffix);
+                    tags.push(tagPrefix + parts[parts.length - 2] + tagSuffix);
                 } else {
-                    tags.push(tagPrefix + pathParts[pathParts.length - 1] + tagSuffix);
+                    tags.push(tagPrefix + parts[parts.length - 1] + tagSuffix);
                 }
                 break;
             case "2single":
-                if (pathParts.length >= 2) {
-                    tags.push(tagPrefix + pathParts[pathParts.length - 2] + "/" + pathParts[pathParts.length - 1] + tagSuffix);
+                if (parts.length >= 2) {
+                    tags.push(tagPrefix + parts[parts.length - 2] + "/" + parts[parts.length - 1] + tagSuffix);
                 } else {
-                    tags.push(tagPrefix + pathParts[pathParts.length - 1] + tagSuffix);
+                    tags.push(tagPrefix + parts[parts.length - 1] + tagSuffix);
                 }
                 break;
             case "full":
-                tags.push(tagPrefix + pathParts.join("/") + tagSuffix);
+                tags.push(tagPrefix + parts.join("/") + tagSuffix);
                 break;
         }
 
@@ -95,70 +86,28 @@ export default class FolderTagPlugin extends Plugin {
         const folderTags = this.getFolderTags(file);
         if (!folderTags.length) return;
 
-        let content = await this.app.vault.read(file);
+        await this.app.fileManager.processFrontMatter(file, yaml => {
+            if (!yaml || typeof yaml !== "object") return;
 
-        // --- YAML frontmatter ---
-        const yamlRegex = /^---\n([\s\S]*?)\n---/;
-        const hasYAML = yamlRegex.test(content);
-
-        if (hasYAML && (action !== "create" || this.settings.overrideExisting)) {
-            const match = content.match(yamlRegex)!;
-            let yamlStr = match[1];
-            let body = content.replace(yamlRegex, "").trimStart();
-
-            let yamlObj: Record<string, any> = {};
-            try {
-                yamlObj = jsyaml.load(yamlStr) as Record<string, any> || {};
-            } catch (e) {
-                console.error("Failed to parse YAML", e);
+            let existingTags: string[] = [];
+            if ("tags" in yaml) {
+                if (Array.isArray(yaml.tags)) existingTags.push(...yaml.tags.map((t: any) => String(t).trim()));
+                else if (typeof yaml.tags === "string") existingTags.push(...yaml.tags.split(",").map((t: string) => t.trim()));
             }
 
-            let tags: string[] = Array.isArray(yamlObj.tags) ? yamlObj.tags : [];
-
-            // Remove old folder tag if moving
+            // Remove old folder tags if moving/rerunning
             if ((action === "move" || action === "rerun") && oldPath) {
-                const oldFolder = oldPath.split("/").slice(-2, -1)[0];
-                tags = tags.filter(t => t !== oldFolder);
+                const oldTags = this.getFolderTagsFromPath(oldPath);
+                existingTags = existingTags.filter(t => !oldTags.includes(t));
             }
 
-            // Add new folder tags
-            for (const t of folderTags) {
-                if (!tags.includes(t)) tags.push(t);
-            }
+            // Add new folder tags (no duplicates)
+            folderTags.forEach(t => { if (!existingTags.includes(t)) existingTags.push(t); });
 
-            yamlObj.tags = tags;
-
-            const newYaml = jsyaml.dump(yamlObj, { lineWidth: -1 }).trim();
-            const newContent = `---\n${newYaml}\n---\n${body}`;
-            await this.app.vault.modify(file, newContent);
-            return;
-        }
-
-        // --- Inline tags ---
-        const inlineTagRegex = /^tags\s*::?\s*(.+)$/m;
-        const inlineMatch = content.match(inlineTagRegex);
-
-        if (inlineMatch && (action !== "create" || this.settings.overrideExisting)) {
-            let tags = inlineMatch[1].split(",").map(t => t.trim());
-            if ((action === "move" || action === "rerun") && oldPath) {
-                const oldFolder = oldPath.split("/").slice(-2, -1)[0];
-                tags = tags.filter(t => t !== oldFolder);
-            }
-
-            for (const t of folderTags) {
-                if (!tags.includes(t)) tags.push(t);
-            }
-
-            const newLine = `tags:: ${tags.join(", ")}`;
-            const newContent = content.replace(inlineTagRegex, newLine);
-            await this.app.vault.modify(file, newContent);
-            return;
-        }
-
-        // --- No tags found → insert YAML frontmatter ---
-        const newContent = `---\ntags:\n${folderTags.map(t => `  - ${t}`).join("\n")}\n---\n${content.trimStart()}`;
-        await this.app.vault.modify(file, newContent);
+            yaml.tags = existingTags;
+        });
     }
+
 
     // -------------------------
     // Remove folder tags
@@ -167,47 +116,21 @@ export default class FolderTagPlugin extends Plugin {
         const folderTags = this.getFolderTags(file);
         if (!folderTags.length) return;
 
-        let content = await this.app.vault.read(file);
+        await this.app.fileManager.processFrontMatter(file, yaml => {
+            if (!yaml || typeof yaml !== "object") return;
 
-        const yamlRegex = /^---\n([\s\S]*?)\n---/;
-        const hasYAML = yamlRegex.test(content);
-
-        if (hasYAML) {
-            const match = content.match(yamlRegex)!;
-            let yamlStr = match[1];
-            let body = content.replace(yamlRegex, "").trimStart();
-
-            let yamlObj: Record<string, any> = {};
-            try {
-                yamlObj = jsyaml.load(yamlStr) as Record<string, any> || {};
-            } catch (e) {
-                console.error("Failed to parse YAML", e);
+            let existingTags: string[] = [];
+            if ("tags" in yaml) {
+                const val = yaml.tags;
+                if (Array.isArray(val)) existingTags.push(...val.map(v => String(v).trim()));
+                else if (typeof val === "string") existingTags.push(...val.split(",").map(v => v.trim()));
             }
 
-            if (Array.isArray(yamlObj.tags)) {
-                yamlObj.tags = yamlObj.tags.filter(t => !folderTags.includes(t));
-            }
+            existingTags = existingTags.filter(t => !folderTags.includes(t));
 
-            const newYaml = jsyaml.dump(yamlObj, { lineWidth: -1 }).trim();
-            const newContent = `---\n${newYaml}\n---\n${body}`;
-            await this.app.vault.modify(file, newContent);
-            return;
-        }
-
-        const inlineTagRegex = /^tags\s*::?\s*(.+)$/m;
-        const inlineMatch = content.match(inlineTagRegex);
-
-        if (inlineMatch) {
-            const tags = inlineMatch[1]
-                .split(",")
-                .map(t => t.trim())
-                .filter(t => !folderTags.includes(t));
-
-            const newLine = `tags:: ${tags.join(", ")}`;
-            const newContent = content.replace(inlineTagRegex, newLine);
-            await this.app.vault.modify(file, newContent);
-            return;
-        }
+            if (existingTags.length === 0) delete yaml.tags;
+            else yaml.tags = existingTags;
+        });
     }
 }
 
@@ -225,84 +148,44 @@ class FolderTagSettingTab extends PluginSettingTab {
     display(): void {
         const { containerEl } = this;
         containerEl.empty();
+        new Setting(containerEl).setHeading().setName("Folder to Tag");
 
-        containerEl.createEl("h2", { text: "Folder to Tag Settings" });
-
-        // Override existing style
-        new Setting(containerEl)
-            .setName("Override existing tags style")
-            .setDesc("If enabled, the plugin will always apply your chosen tag style (YAML or inline) even to notes that already have tags.")
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.overrideExisting)
-                .onChange(async (value) => {
-                    this.plugin.settings.overrideExisting = value;
-                    await this.plugin.saveSettings();
-                    this.display();
-                })
-            );
-
-        // Default tag style
-        new Setting(containerEl)
-            .setName("Default tag style")
-            .setDesc("Choose the tag style used when forcing tags to your preferred format. This setting only applies when 'Override existing tags style' is enabled.")
-            .addDropdown(drop => {
-                drop
-                    .addOption("yaml", "YAML frontmatter")
-                    .addOption("inline", "Inline tag")
-                    .setValue(this.plugin.settings.defaultTagStyle)
-                    .onChange(async (value) => {
-                        this.plugin.settings.defaultTagStyle = value as "yaml" | "inline";
-                        await this.plugin.saveSettings();
-                    });
-            });
-
-        // Folder depth
         new Setting(containerEl)
             .setName("Folder Depth")
-            .setDesc("Choose how many folder levels to use for tagging.")
             .addDropdown(drop => {
-                drop
-                    .addOption("1", "Default (Depth 1)")
-                    .addOption("2split", "Depth 2 (Separate tags, e.g., #sub + #main)")
-                    .addOption("2single", "Depth 2 in one tag, e.g., #main/sub")
-                    .addOption("full", "Full path, e.g., #main/sub/subsub")
+                drop.addOption("1", "Depth 1")
+                    .addOption("2split", "Depth 2 (Separate tags)")
+                    .addOption("2single", "Depth 2 in one tag")
+                    .addOption("full", "Full path")
                     .setValue(this.plugin.settings.folderDepth)
-                    .onChange(async (value) => {
+                    .onChange(async value => {
                         this.plugin.settings.folderDepth = value as FolderTagPluginSettings["folderDepth"];
                         await this.plugin.saveSettings();
                     });
             });
 
-        // Prefix
         new Setting(containerEl)
             .setName("Tag Prefix")
-            .setDesc("Optional prefix to add to all folder tags, e.g., 'folder-' -> #folder-name")
             .addText(txt => txt
-                .setPlaceholder("")
                 .setValue(this.plugin.settings.tagPrefix)
-                .onChange(async (value) => {
+                .onChange(async value => {
                     this.plugin.settings.tagPrefix = value;
                     await this.plugin.saveSettings();
                 })
             );
 
-        // Suffix
         new Setting(containerEl)
             .setName("Tag Suffix")
-            .setDesc("Optional suffix to add to all folder tags, e.g., '-tag' -> #name-tag")
             .addText(txt => txt
-                .setPlaceholder("")
                 .setValue(this.plugin.settings.tagSuffix)
-                .onChange(async (value) => {
+                .onChange(async value => {
                     this.plugin.settings.tagSuffix = value;
                     await this.plugin.saveSettings();
                 })
             );
 
-        // Reapply tags
         new Setting(containerEl)
             .setName("Reapply tags to all notes")
-            .setDesc("Adds folder tags to all existing notes in your vault.")
             .addButton(btn => btn
                 .setButtonText("Reapply to all notes")
                 .setCta()
@@ -310,28 +193,31 @@ class FolderTagSettingTab extends PluginSettingTab {
                     new Notice("Updating all notes...");
                     const files = this.plugin.app.vault.getMarkdownFiles();
                     for (const file of files) {
-                        await this.plugin.applyFolderTag(file, "rerun");
+                        try {
+                            await this.plugin.applyFolderTag(file, "rerun");
+                        } catch (e) {
+                            console.error("Failed for file:", file.path, e);
+                            new Notice(`Failed to process: ${file.path}`);
+                        }
                     }
                     new Notice("Folder tags updated for all notes!");
                 })
             );
 
-        // Remove folder tags button
+
         new Setting(containerEl)
             .setName("Remove all folder tags")
-            .setDesc("Removes all tags from notes that match folder tags (prefix, suffix, and depth-aware).")
-            .addButton(btn => {
-                btn.setButtonText("Remove folder tags")
-                    .setCta();
-                btn.buttonEl.addClass("mod-warning"); // red button
-                btn.onClick(async () => {
-                    new Notice("Removing folder tags...");
+            .addButton(btn => btn
+                .setButtonText("Remove folder tags")
+                .setCta()
+                .onClick(async () => {
+                    new Notice("Removing folder tags from all notes...");
                     const files = this.plugin.app.vault.getMarkdownFiles();
                     for (const file of files) {
                         await this.plugin.removeFolderTags(file);
                     }
                     new Notice("All folder tags removed!");
-                });
-            });
+                })
+            );
     }
 }

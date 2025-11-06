@@ -179,6 +179,19 @@ class FolderTagSettingTab extends obsidian.PluginSettingTab {
             }
             new obsidian.Notice("Folder tags updated for all notes!");
         }));
+        new obsidian.Setting(containerEl)
+            .setName("Remove all folder tags")
+            .addButton(btn => btn
+            .setButtonText("Remove folder tags")
+            .setCta()
+            .onClick(async () => {
+            new obsidian.Notice("Removing folder tags from all notes...");
+            const files = this.plugin.app.vault.getMarkdownFiles();
+            for (const file of files) {
+                await this.plugin.removeFolderTags(file);
+            }
+            new obsidian.Notice("All folder tags removed!");
+        }));
     }
 }
 

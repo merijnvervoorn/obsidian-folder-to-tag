@@ -8,12 +8,8 @@
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.0.0",
     "@rollup/plugin-typescript": "^11.0.0",
-    "@types/js-yaml": "^4.0.9",
     "obsidian": "^1.4.0",
     "tslib": "^2.0.0",
     "typescript": "^5.0.0"
-  },
-  "dependencies": {
-    "js-yaml": "^4.1.0"
   }
 }

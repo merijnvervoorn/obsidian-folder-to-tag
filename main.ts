@@ -109,24 +109,30 @@ export default class FolderTagPlugin extends Plugin {
         const folderTags = this.getFolderTags(file);
         const oldTags = oldPath ? this.getFolderTagsFromPath(oldPath) : [];
 
-        await this.app.fileManager.processFrontMatter(file, yaml => {
-            if (!yaml || typeof yaml !== "object") return;
+        await this.app.fileManager.processFrontMatter(file, (frontmatter: any) => {
+            // Cast to Record to satisfy strict ESLint rules
+            const yaml = frontmatter as Record<string, unknown>;
+            if (!yaml) return;
 
             let existingTags: string[] = [];
-            if ("tags" in yaml) {
-                if (Array.isArray(yaml.tags)) existingTags.push(...yaml.tags.map((t: string | number) => String(t).trim()));
-                else if (typeof yaml.tags === "string") existingTags.push(...yaml.tags.split(",").map((t: string) => t.trim()));
+            const currentTags = yaml["tags"];
+
+            // Safely parse existing tags
+            if (Array.isArray(currentTags)) {
+                existingTags.push(...currentTags.map((t: unknown) => String(t).trim()));
+            } else if (typeof currentTags === "string") {
+                existingTags.push(...currentTags.split(",").map((t: string) => t.trim()));
             }
 
             // Remove old folder tags if moving/rerunning
-            if (oldTags.length) {
+            if (oldTags && oldTags.length) {
                 existingTags = existingTags.filter(t => !oldTags.includes(t));
             }
 
             // Add new folder tags
             folderTags.forEach(t => { if (!existingTags.includes(t)) existingTags.push(t); });
 
-            yaml.tags = existingTags;
+            yaml["tags"] = existingTags;
         });
     }
 
@@ -137,20 +143,26 @@ export default class FolderTagPlugin extends Plugin {
         const folderTags = this.getFolderTags(file);
         if (!folderTags.length) return;
 
-        await this.app.fileManager.processFrontMatter(file, yaml => {
-            if (!yaml || typeof yaml !== "object") return;
+        await this.app.fileManager.processFrontMatter(file, (frontmatter: any) => {
+            const yaml = frontmatter as Record<string, unknown>;
+            if (!yaml) return;
 
             let existingTags: string[] = [];
-            if ("tags" in yaml) {
-                const val = yaml.tags;
-                if (Array.isArray(val)) existingTags.push(...val.map(v => String(v).trim()));
-                else if (typeof val === "string") existingTags.push(...val.split(",").map(v => v.trim()));
+            const currentTags = yaml["tags"];
+
+            if (Array.isArray(currentTags)) {
+                existingTags.push(...currentTags.map((t: unknown) => String(t).trim()));
+            } else if (typeof currentTags === "string") {
+                existingTags.push(...currentTags.split(",").map((t: string) => t.trim()));
             }
 
             existingTags = existingTags.filter(t => !folderTags.includes(t));
 
-            if (existingTags.length === 0) delete yaml.tags;
-            else yaml.tags = existingTags;
+            if (existingTags.length === 0) {
+                delete yaml["tags"];
+            } else {
+                yaml["tags"] = existingTags;
+            }
         });
     }
 }

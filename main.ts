@@ -111,7 +111,6 @@ export default class FolderTagPlugin extends Plugin {
         const folderTags = this.getFolderTags(file);
         const oldTags = oldPath ? this.getFolderTagsFromPath(oldPath) : [];
 
-        // eslint-disable-next-line obsidianmd/no-unsupported-api
         await this.app.fileManager.processFrontMatter(file, (frontmatter: unknown) => {
             // Cast to Record to satisfy strict ESLint rules
             const yaml = frontmatter as Record<string, unknown>;
@@ -146,7 +145,6 @@ export default class FolderTagPlugin extends Plugin {
         const folderTags = this.getFolderTags(file);
         if (!folderTags.length) return;
 
-        // eslint-disable-next-line obsidianmd/no-unsupported-api
         await this.app.fileManager.processFrontMatter(file, (frontmatter: unknown) => {
             const yaml = frontmatter as Record<string, unknown>;
             if (!yaml) return;

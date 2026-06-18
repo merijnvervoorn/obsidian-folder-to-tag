@@ -1,8 +1,8 @@
 {
   "id": "folder-to-tag",
   "name": "Folder to Tag",
-  "version": "1.2.1",
-  "minAppVersion": "1.4.3",
+  "version": "1.2.2",
+  "minAppVersion": "1.5.0",
   "description": "Automatically adds or updates a tag based on the folder a note is in. Updates both on creation and file move.",
   "author": "Merijn Vervoorn",
   "authorUrl": "https://merijnvervoorn.com",

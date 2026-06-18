@@ -1,7 +1,7 @@
 {
-  "overrideExisting": false,
-  "folderDepth": "2split",
+  "folderDepth": "1",
   "tagPrefix": "",
   "tagSuffix": "",
+  "overrideExisting": false,
   "defaultTagStyle": "yaml"
 }

@@ -1,3 +1,21 @@
+/*
+ * Folder to Tag Obsidian Plugin: Automatically tags notes based on their folder.
+ * Copyright (C) 2026 Merijn Vervoorn
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ */
+
 import { App, Plugin, TFile, Notice, PluginSettingTab, Setting, normalizePath } from "obsidian";
 
 interface FolderTagPluginSettings {
@@ -54,25 +72,25 @@ export default class FolderTagPlugin extends Plugin {
 
         switch (folderDepth) {
             case "1":
-                tags.push(tagPrefix + parts[parts.length - 1] + tagSuffix);
+                tags.push((tagPrefix + parts[parts.length - 1] + tagSuffix).replace(/\s+/g, '-'));
                 break;
             case "2split":
                 if (parts.length >= 2) {
-                    tags.push(tagPrefix + parts[parts.length - 1] + tagSuffix);
-                    tags.push(tagPrefix + parts[parts.length - 2] + tagSuffix);
+                    tags.push((tagPrefix + parts[parts.length - 1] + tagSuffix).replace(/\s+/g, '-'));
+                    tags.push((tagPrefix + parts[parts.length - 2] + tagSuffix).replace(/\s+/g, '-'));
                 } else {
-                    tags.push(tagPrefix + parts[parts.length - 1] + tagSuffix);
+                    tags.push((tagPrefix + parts[parts.length - 1] + tagSuffix).replace(/\s+/g, '-'));
                 }
                 break;
             case "2single":
                 if (parts.length >= 2) {
-                    tags.push(tagPrefix + parts[parts.length - 2] + "/" + parts[parts.length - 1] + tagSuffix);
+                    tags.push((tagPrefix + parts[parts.length - 2] + "/" + parts[parts.length - 1] + tagSuffix).replace(/\s+/g, '-'));
                 } else {
-                    tags.push(tagPrefix + parts[parts.length - 1] + tagSuffix);
+                    tags.push((tagPrefix + parts[parts.length - 1] + tagSuffix).replace(/\s+/g, '-'));
                 }
                 break;
             case "full":
-                tags.push(tagPrefix + parts.join("/") + tagSuffix);
+                tags.push((tagPrefix + parts.join("/") + tagSuffix).replace(/\s+/g, '-'));
                 break;
         }
 
@@ -84,7 +102,7 @@ export default class FolderTagPlugin extends Plugin {
     // -------------------------
     async applyFolderTag(file: TFile, action: "create" | "move" | "rerun", oldPath?: string) {
         const folderTags = this.getFolderTags(file);
-        if (!folderTags.length) return;
+        const oldTags = oldPath ? this.getFolderTagsFromPath(oldPath) : [];
 
         await this.app.fileManager.processFrontMatter(file, yaml => {
             if (!yaml || typeof yaml !== "object") return;
@@ -96,8 +114,7 @@ export default class FolderTagPlugin extends Plugin {
             }
 
             // Remove old folder tags if moving/rerunning
-            if ((action === "move" || action === "rerun") && oldPath) {
-                const oldTags = this.getFolderTagsFromPath(oldPath);
+            if (oldTags.length) {
                 existingTags = existingTags.filter(t => !oldTags.includes(t));
             }
 
@@ -107,7 +124,6 @@ export default class FolderTagPlugin extends Plugin {
             yaml.tags = existingTags;
         });
     }
-
 
     // -------------------------
     // Remove folder tags

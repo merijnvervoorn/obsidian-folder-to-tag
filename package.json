@@ -1,6 +1,6 @@
 {
   "name": "folder-to-tag",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "main": "main.js",
   "scripts": {
     "build": "rollup -c rollup.config.mjs"
@@ -8,7 +8,8 @@
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.0.0",
     "@rollup/plugin-typescript": "^11.0.0",
-    "obsidian": "^1.4.0",
+    "obsidian": "^1.4.3",
+    "rollup": "^4.62.0",
     "tslib": "^2.0.0",
     "typescript": "^5.0.0"
   }

@@ -40,7 +40,9 @@ class FolderTagPlugin extends obsidian.Plugin {
         }));
     }
     async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        // Await the data and safely cast it before assignment
+        const data = (await this.loadData());
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
     }
     async saveSettings() {
         await this.saveData(this.settings);

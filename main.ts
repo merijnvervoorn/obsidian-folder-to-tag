@@ -51,7 +51,9 @@ export default class FolderTagPlugin extends Plugin {
     }
 
     async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        // Await the data and safely cast it before assignment
+        const data = (await this.loadData()) as Partial<FolderTagPluginSettings>;
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
     }
 
     async saveSettings() {
@@ -109,7 +111,7 @@ export default class FolderTagPlugin extends Plugin {
         const folderTags = this.getFolderTags(file);
         const oldTags = oldPath ? this.getFolderTagsFromPath(oldPath) : [];
 
-        await this.app.fileManager.processFrontMatter(file, (frontmatter: any) => {
+        await this.app.fileManager.processFrontMatter(file, (frontmatter: unknown) => {
             // Cast to Record to satisfy strict ESLint rules
             const yaml = frontmatter as Record<string, unknown>;
             if (!yaml) return;
@@ -143,7 +145,7 @@ export default class FolderTagPlugin extends Plugin {
         const folderTags = this.getFolderTags(file);
         if (!folderTags.length) return;
 
-        await this.app.fileManager.processFrontMatter(file, (frontmatter: any) => {
+        await this.app.fileManager.processFrontMatter(file, (frontmatter: unknown) => {
             const yaml = frontmatter as Record<string, unknown>;
             if (!yaml) return;
 
